@@ -378,7 +378,7 @@ async function analyzePcap(filePath, filename) {
     result.summary.total_packets = parseInt(countOut) || 0;
     const durOut = await run('tshark -r "' + filePath + '" -T fields -e frame.time_relative 2>/dev/null | tail -1');
     result.summary.duration_seconds = parseFloat(durOut) || 0;
-    const bytesOut = await run('tshark -r "' + filePath + '" -T fields -e frame.len 2>/dev/null | awk '{s+=$1} END {print s}'');
+    const bytesOut = await run("tshark -r \"" + filePath + "\" -T fields -e frame.len 2>/dev/null | awk '{s+=$1} END {print s}'");
     result.summary.total_bytes = parseInt(bytesOut) || 0;
     const protoOut = await run('tshark -r "' + filePath + '" -q -z io,phs 2>/dev/null');
     result.summary.protocol_hierarchy = protoOut;
