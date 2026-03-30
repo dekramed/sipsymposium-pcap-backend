@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Analyzer — SIPSymposium</title>
+<script>
+// Immediate auth guard — fires before page renders
+(function() {
+  var s = null;
+  try { s = JSON.parse(localStorage.getItem('ss_session')); } catch(e) {}
+  if (!s || !s.access_token || !s.user) {
+    window.location.replace('/login.html');
+  }
+})();
+</script>
+<link rel="stylesheet" href="shared.css"/>
+<style>
+.wrap{max-width:1180px;margin:0 auto;padding:0 2rem 7rem}
+.page-head{padding:3rem 0 2rem;display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:1rem;border-bottom:1px solid var(--border);margin-bottom:2rem}
+.page-head h1{font-family:var(--f-head);font-size:28px;color:var(--t1);letter-spacing:-.04em}
+.page-head p{font-size:13px;color:var(--t2);margin-top:5px;font-weight:300}
+
+.diag-panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r3);padding:1.5rem 1.75rem;margin-bottom:1.5rem;transition:border-color .25s}
+.diag-panel:hover{border-color:var(--border2)}
+.diag-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:10px}
+.diag-label{font-size:12.5px;font-weight:500;color:var(--t2);display:flex;align-items:center;gap:8px}
+.diag-label svg{width:14px;height:14px;fill:none;stroke:var(--a2);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.diag-chips{display:flex;gap:6px;flex-wrap:wrap}
+
+.drop-zone{border:1px dashed var(--border2);border-radius:var(--r2);padding:2rem;text-align:center;cursor:pointer;position:relative;transition:all .25s}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--a-border);background:var(--a-glow2);box-shadow:0 0 30px var(--a-glow)}
+.drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.drop-zone-icon{font-size:22px;color:var(--t3);margin-bottom:8px}
+.drop-zone p{font-size:13px;color:var(--t2);font-weight:300}
+.drop-zone span{font-size:11.5px;color:var(--t3);font-weight:300}
+
+.diag-preview{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:var(--r2);padding:12px 16px;margin-top:12px}
+.diag-preview img{max-height:56px;max-width:72px;border-radius:6px;object-fit:cover;opacity:.8}
+.dp-info{flex:1;min-width:0}
+.dp-name{font-size:13px;font-weight:400;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dp-type{font-size:11px;color:var(--t3);margin-top:2px;font-weight:300}
+
+.ep-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;margin-bottom:14px}
+.ep-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r3);overflow:hidden;transition:border-color .25s,box-shadow .25s}
+.ep-card:hover{border-color:var(--border2);box-shadow:0 8px 30px rgba(0,0,0,0.3)}
+.ep-head{display:flex;align-items:center;gap:10px;padding:13px 18px 11px;border-bottom:1px solid var(--border)}
+.ep-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.ep-name{flex:1;font-family:var(--f-body);font-size:13.5px;font-weight:400;color:var(--t1);background:transparent;border:none;outline:none;min-width:0}
+.ep-name::placeholder{color:var(--t3)}
+.ep-chips{display:flex;gap:5px;padding:9px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.ep-body{padding:14px 18px}
+.ep-textarea{width:100%;min-height:130px;font-family:var(--f-mono);font-size:11.5px;font-weight:300;line-height:1.7;color:var(--t1);background:rgba(0,0,0,0.25);border:1px solid var(--border);border-radius:var(--r2);padding:12px 14px;resize:vertical;outline:none;transition:border-color .2s,box-shadow .2s}
+.ep-textarea:focus{border-color:var(--a-border);box-shadow:0 0 0 3px var(--a-glow2),0 0 20px var(--a-glow)}
+.ep-textarea::placeholder{color:var(--t3);font-family:var(--f-body);font-size:12px}
+.pcap-zone{border:1px dashed var(--border2);border-radius:var(--r2);padding:14px;text-align:center;cursor:pointer;transition:all .22s;position:relative;margin-top:10px}
+.pcap-zone:hover,.pcap-zone.drag{border-color:var(--a-border);background:var(--a-glow2)}
+.pcap-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.pcap-zone p{font-size:12px;color:var(--t2);font-weight:300}
+.pcap-zone span{font-size:11px;color:var(--t3);font-weight:300}
+.pcap-loaded{display:flex;align-items:center;gap:8px;background:var(--ok-bg);border:1px solid var(--ok-b);border-radius:var(--r2);padding:9px 13px;margin-top:10px;font-size:12px;color:var(--ok);font-weight:300}
+.ep-foot{display:flex;align-items:center;justify-content:space-between;padding:8px 18px 14px}
+.ep-chars{font-size:11px;color:var(--t3);font-weight:300}
+.btn-rm{font-size:11.5px;color:var(--t3);background:none;border:none;cursor:pointer;font-family:var(--f-body);padding:4px 9px;border-radius:var(--r);transition:all .18s}
+.btn-rm:hover{color:var(--crit);background:var(--crit-bg)}
+
+.controls{display:flex;align-items:center;gap:10px;margin-bottom:2.5rem;flex-wrap:wrap}
+.btn-add{display:flex;align-items:center;gap:7px;font-size:13px;font-family:var(--f-body);font-weight:400;color:var(--t2);background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:9px 18px;cursor:pointer;transition:all .22s}
+.btn-add:hover{border-color:var(--border3);color:var(--t1);background:var(--bg3)}
+.ctx-in{flex:1;min-width:200px;height:42px;padding:0 14px;font-size:13px;font-family:var(--f-body);font-weight:300;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);color:var(--t1);outline:none;transition:all .22s}
+.ctx-in:focus{border-color:var(--a-border);box-shadow:0 0 0 3px var(--a-glow2)}
+.ctx-in::placeholder{color:var(--t3)}
+
+.loading{display:none;align-items:center;gap:12px;padding:2rem 0;color:var(--t2);font-size:13.5px;font-weight:300}
+.loading.on{display:flex}
+.spinner{width:20px;height:20px;border-radius:50%;border:2px solid var(--border2);border-top-color:var(--a1);animation:spin .7s linear infinite;box-shadow:0 0 12px var(--a-glow)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.err-bar{display:none;background:var(--crit-bg);border:1px solid var(--crit-b);border-radius:var(--r2);padding:12px 16px;font-size:13px;color:var(--crit);margin-bottom:1rem;font-weight:300}
+.err-bar.on{display:block}
+
+.results{display:none}
+.results.on{display:block}
+.res-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:12px}
+.res-title{font-family:var(--f-head);font-size:20px;color:var(--t1);letter-spacing:-.03em}
+.res-meta{font-size:12px;color:var(--t3);margin-top:4px;font-weight:300}
+.res-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+.sev-row{display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap}
+.sev-badge{display:flex;align-items:center;gap:8px;padding:7px 16px;border-radius:30px;font-size:12px;font-weight:400;border:1px solid}
+.sev-badge .n{font-family:var(--f-head);font-size:18px}
+.sev-badge.crit{background:var(--crit-bg);color:var(--crit);border-color:var(--crit-b)}
+.sev-badge.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-b)}
+.sev-badge.info{background:var(--info-bg);color:var(--info);border-color:var(--info-b)}
+.sev-badge.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-b)}
+
+.corr-bar{display:none;align-items:flex-start;gap:11px;background:var(--info-bg);border:1px solid var(--info-b);border-radius:var(--r2);padding:13px 17px;margin-bottom:1.25rem;font-size:13px;color:var(--t2);line-height:1.65;font-weight:300}
+.corr-bar.on{display:flex}
+.corr-bar svg{width:15px;height:15px;fill:none;stroke:var(--a2);stroke-width:1.8;stroke-linecap:round;flex-shrink:0;margin-top:2px}
+
+.sum-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r3);padding:1.5rem 1.75rem;margin-bottom:1.25rem;transition:border-color .25s}
+.sum-card:hover{border-color:var(--border2)}
+.sum-lbl{font-size:10.5px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:10px}
+.sum-txt{font-size:14px;color:var(--t2);line-height:1.75;font-weight:300}
+
+.filter-bar{display:flex;gap:6px;margin-bottom:1.1rem;flex-wrap:wrap;align-items:center}
+.filter-lbl{font-size:11px;color:var(--t3);font-weight:300;margin-right:2px}
+.fchip{font-size:11.5px;padding:5px 13px;border-radius:20px;border:1px solid var(--border2);color:var(--t2);cursor:pointer;background:transparent;font-family:var(--f-body);transition:all .18s;font-weight:300}
+.fchip:hover{border-color:var(--border3);color:var(--t1)}
+.fchip.on{background:var(--a-glow2);color:var(--a3);border-color:var(--a-border)}
+
+.issue-list{display:flex;flex-direction:column;gap:10px;margin-bottom:2rem}
+.issue-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r3);overflow:hidden;transition:border-color .25s,transform .25s,box-shadow .25s}
+.issue-card:hover{border-color:var(--border2);transform:translateY(-2px);box-shadow:0 12px 40px rgba(0,0,0,0.35)}
+.issue-card.crit{border-left:2px solid var(--crit)}
+.issue-card.warn{border-left:2px solid var(--warn)}
+.issue-card.info{border-left:2px solid var(--info)}
+.issue-card.ok{border-left:2px solid var(--ok)}
+.issue-card.corr{border-left:2px solid var(--a2)}
+
+.itop{display:flex;align-items:flex-start;gap:12px;padding:15px 18px 9px}
+.ibadges{display:flex;gap:5px;flex-wrap:wrap;flex-shrink:0;margin-top:1px}
+.ibadge{font-size:10px;font-weight:500;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;border:1px solid}
+.ibadge.crit{background:var(--crit-bg);color:var(--crit);border-color:var(--crit-b)}
+.ibadge.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-b)}
+.ibadge.info{background:var(--info-bg);color:var(--info);border-color:var(--info-b)}
+.ibadge.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-b)}
+.ibadge.cat{background:rgba(255,255,255,0.04);color:var(--t2);border-color:var(--border2)}
+.ibadge.corr{background:var(--a-glow2);color:var(--a3);border-color:var(--a-border)}
+.ibadge.ep{background:rgba(255,255,255,0.03);color:var(--t2);border-color:var(--border);border-left:2px solid;padding-left:7px}
+.ititle-col{flex:1;min-width:0}
+.ititle{font-size:14px;font-weight:400;color:var(--t1);line-height:1.4;letter-spacing:-.01em}
+.ieps{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+.ibody{padding:0 18px 15px}
+.idetail{font-size:13px;color:var(--t2);line-height:1.7;margin-bottom:10px;font-weight:300}
+.irec{background:rgba(0,0,0,0.2);border-left:2px solid var(--border2);padding:10px 15px;font-size:12.5px;color:var(--t2);line-height:1.65;font-weight:300}
+.irec strong{font-weight:500;color:var(--t1)}
+
+.followup{margin-top:2rem}
+.followup-lbl{font-size:10.5px;font-weight:500;text-transform:uppercase;letter-spacing:.08em;color:var(--t3);margin-bottom:12px}
+.fup-chips{display:flex;gap:8px;flex-wrap:wrap}
+.fup-chip{font-size:12.5px;padding:8px 16px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);color:var(--t2);cursor:pointer;font-family:var(--f-body);font-weight:300;transition:all .22s}
+.fup-chip:hover{border-color:var(--a-border);color:var(--a3);background:var(--a-glow2)}
+
+@media(max-width:700px){
+  .wrap{padding:0 1.25rem 4rem}
+  .ep-grid{grid-template-columns:1fr}
+  .controls{flex-direction:column;align-items:stretch}
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="index.html">
+    <div class="logo-gem">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    </div>
+    SIPSymposium
+  </a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link active" href="analyzer.html">Analyzer</a>
+    <a class="nav-link" href="about.html">About</a>
+  </div>
+  <div class="nav-right" id="navAuth"></div>
+</nav>
+
+<div class="wrap">
+  <div class="page-head">
+    <div>
+      <h1>Multi-endpoint diagnostic</h1>
+      <p>Paste traces, upload PCAPs or diagrams, then run AI analysis across all endpoints.</p>
+    </div>
+    <button class="btn btn-ghost" id="clearBtn" style="font-size:12px;padding:6px 14px">Clear all</button>
+  </div>
+
+  <!-- Diagram panel -->
+  <div class="diag-panel">
+    <div class="diag-head">
+      <div class="diag-label">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        Network diagram / call flow
+        <span style="font-size:11px;color:var(--t3);font-weight:300">— optional</span>
+      </div>
+      <div class="diag-chips" id="diagTypeRow">
+        <button class="chip on">Network topology</button>
+        <button class="chip on">Call flow</button>
+      </div>
+    </div>
+    <div class="drop-zone" id="diagDrop">
+      <input type="file" id="diagFileInput" accept="image/*"/>
+      <div class="drop-zone-icon">&#128247;</div>
+      <p>Drop a diagram here, or click to upload</p>
+      <span>PNG, JPG, WEBP — topology or call flow diagrams</span>
+    </div>
+    <div class="diag-preview" id="diagPreview" style="display:none">
+      <img id="diagThumb" src="" alt="diagram"/>
+      <div class="dp-info">
+        <div class="dp-name" id="diagName"></div>
+        <div class="dp-type" id="diagType"></div>
+      </div>
+      <button class="btn-rm" id="removeDiagBtn">Remove</button>
+    </div>
+  </div>
+
+  <!-- Endpoint grid -->
+  <div class="ep-grid" id="epGrid"></div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn-add" id="addEpBtn">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Add endpoint
+    </button>
+    <input class="ctx-in" id="ctxInput" placeholder="Context — topology, vendor, symptoms, environment…"/>
+    <button class="btn btn-primary" id="runBtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <span>Run analysis</span>
+    </button>
+  </div>
+
+  <div class="loading" id="loadingBar">
+    <div class="spinner"></div>
+    <span id="loadingTxt">Analyzing…</span>
+  </div>
+  <div class="err-bar" id="errBar"></div>
+
+  <section class="results" id="resultsSection">
+    <div class="res-head">
+      <div>
+        <div class="res-title">Diagnostic report</div>
+        <div class="res-meta" id="resMeta"></div>
+      </div>
+      <div class="res-actions">
+        <button class="btn btn-ghost" id="saveBtn" style="font-size:12px;padding:6px 14px">Save</button>
+        <button class="btn btn-ghost" id="copyBtn" style="font-size:12px;padding:6px 14px">Copy report</button>
+      </div>
+    </div>
+    <div class="sev-row" id="sevRow"></div>
+    <div class="corr-bar" id="corrBar">
+      <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <span id="corrText"></span>
+    </div>
+    <div class="sum-card">
+      <div class="sum-lbl">Executive summary</div>
+      <div class="sum-txt" id="sumText"></div>
+    </div>
+    <div class="filter-bar">
+      <span class="filter-lbl">Filter:</span>
+      <button class="fchip on" data-filter="all">All</button>
+      <button class="fchip" data-filter="critical">Critical</button>
+      <button class="fchip" data-filter="warning">Warning</button>
+      <button class="fchip" data-filter="info">Info</button>
+      <button class="fchip" data-filter="correlation">Cross-endpoint</button>
+    </div>
+    <div class="issue-list" id="issueList"></div>
+    <div class="followup">
+      <div class="followup-lbl">Dig deeper</div>
+      <div class="fup-chips" id="followupChips"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+// ── Constants ──
+var EP_COLORS = ['#6366f1','#a78bfa','#34d399','#fbbf24','#f87171','#22d3ee','#fb923c'];
+
+// ── PCAP backend URL ──
+// After deploying to Railway, replace this with your Railway URL
+var PCAP_BACKEND_URL = 'https://YOUR-APP.railway.app';
+var PCAP_API_KEY     = 'YOUR_PCAP_API_KEY'; // must match PCAP_API_KEY env var on Railway
+var EP_NAMES  = ['Endpoint A','Endpoint B','Endpoint C','Endpoint D','Endpoint E','Endpoint F'];
+var INPUT_TYPES = ['SIP trace','SDP offer/answer','RTP/RTCP stats','PCAP','Error logs','Scenario'];
+
+// ── State ──
+var endpoints   = [];
+var epCounter   = 0;
+var diagData    = null;
+var lastReport  = null;
+var activeFilter = 'all';
+
+// ── Diagram upload ──
+function handleDiagFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var b64 = e.target.result.split(',')[1];
+    var activeTypes = [];
+    document.querySelectorAll('#diagTypeRow .chip.on').forEach(function(c) {
+      activeTypes.push(c.textContent);
+    });
+    var label = activeTypes.join(', ') || 'Diagram';
+    diagData = { base64: b64, name: file.name, mimeType: file.type, label: label };
+    document.getElementById('diagThumb').src = e.target.result;
+    document.getElementById('diagName').textContent = file.name;
+    document.getElementById('diagType').textContent = label;
+    document.getElementById('diagPreview').style.display = 'flex';
+    document.getElementById('diagDrop').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeDiagram() {
+  diagData = null;
+  document.getElementById('diagPreview').style.display = 'none';
+  document.getElementById('diagDrop').style.display = 'block';
+}
+
+// ── PCAP parser ──
+function parsePcap(buffer) {
+  var result = '';
+  try {
+    var view = new DataView(buffer);
+    var magic = view.getUint32(0, true);
+    var le = (magic === 0xa1b2c3d4 || magic === 0xa1b23c4d);
+    var validMagic = [0xa1b2c3d4, 0xd4c3b2a1, 0xa1b23c4d, 0x4d3cb2a1];
+    if (validMagic.indexOf(magic) === -1) {
+      return '[Not a valid pcap file — try pasting text instead]';
+    }
+    var offset = 24;
+    var end = buffer.byteLength;
+    var sipMessages = [];
+    var rtpStreams = {};
+    var pktCount = 0;
+
+    while (offset + 16 < end && sipMessages.length < 30) {
+      var inclLen = view.getUint32(offset + 8, le);
+      var pktData = offset + 16;
+      if (inclLen < 1 || pktData + inclLen > end) break;
+      pktCount++;
+
+      if (inclLen > 42) {
+        try {
+          var ipOff = pktData + 14;
+          var ipVer = (view.getUint8(ipOff) >> 4);
+          if (ipVer === 4) {
+            var ihl = (view.getUint8(ipOff) & 0xf) * 4;
+            var proto = view.getUint8(ipOff + 9);
+            var srcIp = view.getUint8(ipOff+12)+'.'+view.getUint8(ipOff+13)+'.'+view.getUint8(ipOff+14)+'.'+view.getUint8(ipOff+15);
+            var dstIp = view.getUint8(ipOff+16)+'.'+view.getUint8(ipOff+17)+'.'+view.getUint8(ipOff+18)+'.'+view.getUint8(ipOff+19);
+            if (proto === 17) {
+              var udpOff = ipOff + ihl;
+              var srcPort = view.getUint16(udpOff, false);
+              var dstPort = view.getUint16(udpOff + 2, false);
+              var payloadOff = udpOff + 8;
+              var payloadLen = inclLen - (payloadOff - pktData);
+              if (payloadLen > 0) {
+                var bytes = new Uint8Array(buffer, payloadOff, Math.min(payloadLen, 2048));
+                var text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+                var sipPattern = /^(INVITE|ACK|BYE|CANCEL|OPTIONS|REGISTER|SUBSCRIBE|NOTIFY|INFO|REFER|UPDATE|PRACK|MESSAGE|SIP\/2\.0)/;
+                if (sipPattern.test(text.trim())) {
+                  sipMessages.push('--- SIP [' + srcIp + ':' + srcPort + ' > ' + dstIp + ':' + dstPort + '] ---\n' + text.substring(0, 1200));
+                } else if (payloadLen >= 12) {
+                  var b0 = view.getUint8(payloadOff);
+                  var pt = view.getUint8(payloadOff + 1) & 0x7f;
+                  if ((b0 >> 6) === 2 && pt < 128) {
+                    var ssrc = view.getUint32(payloadOff + 8, false).toString(16);
+                    var seq  = view.getUint16(payloadOff + 2, false);
+                    var key  = srcIp + ':' + srcPort + '>' + dstIp + ':' + dstPort;
+                    if (!rtpStreams[key]) {
+                      rtpStreams[key] = { ssrc: ssrc, pt: pt, pkts: 0, firstSeq: seq };
+                    } else {
+                      rtpStreams[key].pkts++;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (innerErr) {
+          // skip malformed packet
+        }
+      }
+      offset = pktData + inclLen;
+    }
+
+    var sipCount = sipMessages.length;
+    var rtpCount = Object.keys(rtpStreams).length;
+    result = '=== PCAP: ' + pktCount + ' packets | SIP: ' + sipCount + ' | RTP: ' + rtpCount + ' streams ===\n\n';
+    if (sipCount > 0) {
+      result += '=== SIP MESSAGES ===\n' + sipMessages.join('\n\n') + '\n\n';
+    }
+    if (rtpCount > 0) {
+      result += '=== RTP STREAMS ===\n';
+      for (var flow in rtpStreams) {
+        var s = rtpStreams[flow];
+        result += flow + ' | SSRC:0x' + s.ssrc + ' PT:' + s.pt + ' Pkts:' + (s.pkts + 1) + '\n';
+      }
+    }
+    if (sipCount === 0 && rtpCount === 0) {
+      result += '[No SIP/RTP found — may use TCP, VLAN, or non-standard ports]';
+    }
+  } catch (e) {
+    result = '[PCAP error: ' + e.message + ']';
+  }
+  return result;
+}
+
+// ── Endpoint management ──
+function getEp(id) {
+  for (var i = 0; i < endpoints.length; i++) {
+    if (endpoints[i].id === id) return endpoints[i];
+  }
+  return null;
+}
+
+function addEndpoint() {
+  var id  = epCounter++;
+  var idx = endpoints.length;
+  endpoints.push({
+    id: id,
+    name: EP_NAMES[idx % EP_NAMES.length],
+    color: EP_COLORS[idx % EP_COLORS.length],
+    types: ['SIP trace'],
+    text: '',
+    pcapText: null,
+    pcapName: null
+  });
+  renderGrid();
+}
+
+function removeEndpoint(id) {
+  endpoints = endpoints.filter(function(e) { return e.id !== id; });
+  renderGrid();
+}
+
+function toggleType(epId, type, btn) {
+  var ep = getEp(epId);
+  if (!ep) return;
+  var idx = ep.types.indexOf(type);
+  if (idx === -1) {
+    ep.types.push(type);
+    btn.classList.add('on');
+  } else if (ep.types.length > 1) {
+    ep.types.splice(idx, 1);
+    btn.classList.remove('on');
+  }
+}
+
+function updateChars(epId) {
+  var ep = getEp(epId);
+  var el = document.getElementById('ec-' + epId);
+  if (ep && el) {
+    var len = (ep.pcapText || ep.text).length;
+    el.textContent = len.toLocaleString() + ' chars';
+  }
+}
+
+function handlePcapFile(file, epId) {
+  if (!file) return;
+  var ep = getEp(epId);
+  if (!ep) return;
+
+  // Show loading state on the endpoint card
+  ep.pcapName = file.name;
+  ep.pcapText = 'Uploading and analyzing with tshark...';
+  ep.pcapLoading = true;
+  if (ep.types.indexOf('PCAP') === -1) ep.types.push('PCAP');
+  renderGrid();
+
+  // Try Railway backend first (deep tshark analysis)
+  if (PCAP_BACKEND_URL && PCAP_BACKEND_URL !== 'https://YOUR-APP.railway.app') {
+    var formData = new FormData();
+    formData.append('pcap', file);
+    fetch(PCAP_BACKEND_URL + '/analyze', {
+      method: 'POST',
+      headers: { 'x-api-key': PCAP_API_KEY },
+      body: formData
+    })
+    .then(function(res) {
+      if (!res.ok) throw new Error('Backend returned ' + res.status);
+      return res.json();
+    })
+    .then(function(data) {
+      var ep2 = getEp(epId);
+      if (!ep2) return;
+      if (data.success && data.analysis && data.analysis.formatted_for_ai) {
+        ep2.pcapText    = data.analysis.formatted_for_ai;
+        ep2.pcapRaw     = data.analysis;
+        ep2.pcapLoading = false;
+        ep2.pcapMethod  = 'tshark';
+      } else {
+        throw new Error('Invalid response from backend');
+      }
+      renderGrid();
+    })
+    .catch(function(err) {
+      console.warn('Railway backend failed, falling back to browser parser:', err.message);
+      // Fallback to browser parser
+      browserParsePcap(file, epId);
+    });
+  } else {
+    // No backend configured — use browser parser
+    browserParsePcap(file, epId);
+  }
+}
+
+function browserParsePcap(file, epId) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var parsed = parsePcap(e.target.result);
+    var ep = getEp(epId);
+    if (!ep) return;
+    ep.pcapText    = parsed;
+    ep.pcapLoading = false;
+    ep.pcapMethod  = 'browser';
+    renderGrid();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function removePcap(epId) {
+  var ep = getEp(epId);
+  if (!ep) return;
+  ep.pcapText = null;
+  ep.pcapName = null;
+  ep.types = ep.types.filter(function(t) { return t !== 'PCAP'; });
+  renderGrid();
+}
+
+function renderGrid() {
+  var grid = document.getElementById('epGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  endpoints.forEach(function(ep, idx) {
+    // Card
+    var card = document.createElement('div');
+    card.className = 'ep-card';
+    card.style.animationDelay = (idx * 0.06) + 's';
+
+    // Header
+    var head = document.createElement('div');
+    head.className = 'ep-head';
+    var dot = document.createElement('div');
+    dot.className = 'ep-dot';
+    dot.style.background = ep.color;
+    dot.style.boxShadow = '0 0 8px ' + ep.color;
+    var nameInput = document.createElement('input');
+    nameInput.className = 'ep-name';
+    nameInput.value = ep.name;
+    nameInput.placeholder = 'Endpoint name';
+    (function(epId) {
+      nameInput.addEventListener('change', function() {
+        var e = getEp(epId);
+        if (e) e.name = this.value;
+      });
+    })(ep.id);
+    head.appendChild(dot);
+    head.appendChild(nameInput);
+
+    // Type chips
+    var chipsDiv = document.createElement('div');
+    chipsDiv.className = 'ep-chips';
+    INPUT_TYPES.forEach(function(type) {
+      var btn = document.createElement('button');
+      btn.className = 'chip' + (ep.types.indexOf(type) !== -1 ? ' on' : '');
+      btn.textContent = type;
+      (function(epId, t) {
+        btn.addEventListener('click', function() { toggleType(epId, t, this); });
+      })(ep.id, type);
+      chipsDiv.appendChild(btn);
+    });
+
+    // Body
+    var body = document.createElement('div');
+    body.className = 'ep-body';
+
+    var ta = document.createElement('textarea');
+    ta.className = 'ep-textarea';
+    ta.rows = 7;
+    ta.placeholder = 'Paste SIP messages, SDP, RTP stats, logs, or describe the scenario…';
+    ta.value = ep.text;
+    (function(epId) {
+      ta.addEventListener('input', function() {
+        var e = getEp(epId);
+        if (e) e.text = this.value;
+        updateChars(epId);
+      });
+    })(ep.id);
+    body.appendChild(ta);
+
+    // PCAP section
+    if (ep.pcapText) {
+      var pcapLoaded = document.createElement('div');
+      pcapLoaded.className = 'pcap-loaded';
+      pcapLoaded.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
+      var pcapSpan = document.createElement('span');
+      var method = ep.pcapMethod === 'tshark' ? ' · tshark (full decode)' : ' · browser parser';
+      var loadingTxt = ep.pcapLoading ? 'Analyzing with tshark…' : ep.pcapName + ' — ' + ep.pcapText.length.toLocaleString() + ' chars' + method;
+      pcapSpan.textContent = loadingTxt;
+      var pcapRm = document.createElement('button');
+      pcapRm.className = 'btn-rm';
+      pcapRm.textContent = 'Remove';
+      pcapRm.style.marginLeft = 'auto';
+      (function(epId) {
+        pcapRm.addEventListener('click', function() { removePcap(epId); });
+      })(ep.id);
+      pcapLoaded.appendChild(pcapSpan);
+      pcapLoaded.appendChild(pcapRm);
+      body.appendChild(pcapLoaded);
+    } else {
+      var pcapZone = document.createElement('div');
+      pcapZone.className = 'pcap-zone';
+      pcapZone.id = 'pz-' + ep.id;
+      var pcapInput = document.createElement('input');
+      pcapInput.type = 'file';
+      pcapInput.accept = '.pcap,.pcapng,application/octet-stream';
+      (function(epId) {
+        pcapInput.addEventListener('change', function() { handlePcapFile(this.files[0], epId); });
+        pcapZone.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('drag'); });
+        pcapZone.addEventListener('dragleave', function() { this.classList.remove('drag'); });
+        pcapZone.addEventListener('drop', function(e) { e.preventDefault(); this.classList.remove('drag'); handlePcapFile(e.dataTransfer.files[0], epId); });
+      })(ep.id);
+      var pzp = document.createElement('p'); pzp.textContent = 'Drop .pcap or click to upload';
+      var pzs = document.createElement('span'); pzs.textContent = 'SIP & RTP extracted automatically';
+      pcapZone.appendChild(pcapInput);
+      pcapZone.appendChild(pzp);
+      pcapZone.appendChild(pzs);
+      body.appendChild(pcapZone);
+    }
+
+    // Footer
+    var foot = document.createElement('div');
+    foot.className = 'ep-foot';
+    var chars = document.createElement('span');
+    chars.className = 'ep-chars';
+    chars.id = 'ec-' + ep.id;
+    chars.textContent = (ep.pcapText || ep.text).length.toLocaleString() + ' chars';
+    foot.appendChild(chars);
+    if (endpoints.length > 1) {
+      var rmBtn = document.createElement('button');
+      rmBtn.className = 'btn-rm';
+      rmBtn.textContent = 'Remove';
+      (function(epId) {
+        rmBtn.addEventListener('click', function() { removeEndpoint(epId); });
+      })(ep.id);
+      foot.appendChild(rmBtn);
+    } else {
+      foot.appendChild(document.createElement('span'));
+    }
+
+    card.appendChild(head);
+    card.appendChild(chipsDiv);
+    card.appendChild(body);
+    card.appendChild(foot);
+    grid.appendChild(card);
+  });
+}
+
+// ── Analysis ──
+function buildPrompt(eps, ctx, diag) {
+  var multi = eps.length > 1;
+  var blocks = eps.map(function(ep) {
+    var content = ep.pcapText ? '[PCAP]\n' + ep.pcapText : (ep.text || '[no data]');
+    return '=== ' + ep.name + ' (' + ep.types.join(', ') + ') ===\n' + content;
+  }).join('\n\n');
+
+  var epNames = eps.map(function(e) { return '"' + e.name + '"'; }).join('|');
+
+  return 'You are a senior VoIP/SIP engineer expert in RFC 3261, SDP, RTP/RTCP, SRTP/DTLS, ICE/STUN/TURN, NAT, TLS, codec negotiation.\n' +
+    (multi ? 'Analyze ' + eps.length + ' endpoints individually AND cross-correlate.' : 'Analyze thoroughly.') + '\n' +
+    (diag ? 'A ' + diag.label + ' diagram is attached — incorporate visual observations.' : '') + '\n' +
+    (ctx ? 'Context: ' + ctx : '') + '\n\n' +
+    'INPUT:\n' + blocks + '\n\n' +
+    'Return ONLY valid JSON (no markdown, no backticks):\n' +
+    '{"summary":"3-4 sentence expert overview",' +
+    '"correlationSummary":' + (multi ? '"cross-endpoint findings summary"' : 'null') + ',' +
+    '"issues":[{"severity":"critical|warning|info|ok","category":"signaling|media|encryption|nat|codec|timing|compliance|authentication|correlation|diagram|other","title":"short title","endpoints":[' + epNames + '],"detail":"expert technical detail referencing headers/RFC/values","recommendation":"specific actionable fix"}],' +
+    '"followUps":["Q1","Q2","Q3"]}';
+}
+
+async function runAnalysis() {
+  var eps = endpoints.filter(function(e) { return e.text.trim() || e.pcapText; });
+  if (!eps.length) {
+    showErr('Add at least one endpoint with data before running analysis.');
+    return;
+  }
+  var ctx = document.getElementById('ctxInput').value.trim();
+  var runBtn = document.getElementById('runBtn');
+  runBtn.disabled = true;
+  document.getElementById('loadingTxt').textContent = eps.length > 1 ? 'Analyzing ' + eps.length + ' endpoints…' : 'Running diagnostic…';
+  document.getElementById('loadingBar').classList.add('on');
+  document.getElementById('resultsSection').classList.remove('on');
+  document.getElementById('errBar').classList.remove('on');
+
+  try {
+    var content = [];
+    if (diagData) {
+      content.push({ type: 'image', source: { type: 'base64', media_type: diagData.mimeType, data: diagData.base64 } });
+    }
+    content.push({ type: 'text', text: buildPrompt(eps, ctx, diagData) });
+
+    var response = await fetch('/.netlify/functions/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: content }]
+      })
+    });
+
+    var data = await response.json();
+    var rawText = '';
+    if (data.content && data.content.length > 0) {
+      data.content.forEach(function(block) {
+        if (block.text) rawText += block.text;
+      });
+    }
+    rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    var report = JSON.parse(rawText);
+    lastReport = { report: report, eps: eps.slice(), ts: new Date() };
+    renderReport(report, eps);
+  } catch (err) {
+    showErr('Analysis failed: ' + err.message);
+  } finally {
+    runBtn.disabled = false;
+    document.getElementById('loadingBar').classList.remove('on');
+  }
+}
+
+function renderReport(report, eps) {
+  document.getElementById('resMeta').textContent =
+    eps.length + ' endpoint' + (eps.length > 1 ? 's' : '') +
+    ' · ' + report.issues.length + ' findings · ' + new Date().toLocaleTimeString();
+
+  // Severity counts
+  var counts = { critical: 0, warning: 0, info: 0, ok: 0 };
+  report.issues.forEach(function(i) { if (counts[i.severity] !== undefined) counts[i.severity]++; });
+  var sevRow = document.getElementById('sevRow');
+  sevRow.innerHTML = '';
+  [{ k:'critical',cls:'crit',l:'Critical' },{ k:'warning',cls:'warn',l:'Warning' },{ k:'info',cls:'info',l:'Info' },{ k:'ok',cls:'ok',l:'OK' }]
+    .filter(function(x) { return counts[x.k] > 0; })
+    .forEach(function(x) {
+      var b = document.createElement('div');
+      b.className = 'sev-badge ' + x.cls;
+      b.innerHTML = '<span class="n">' + counts[x.k] + '</span>' + x.l;
+      sevRow.appendChild(b);
+    });
+
+  // Correlation
+  var corrBar = document.getElementById('corrBar');
+  if (report.correlationSummary && eps.length > 1) {
+    document.getElementById('corrText').textContent = report.correlationSummary;
+    corrBar.classList.add('on');
+  } else {
+    corrBar.classList.remove('on');
+  }
+
+  document.getElementById('sumText').textContent = report.summary;
+  renderIssues(report.issues, eps);
+
+  // Follow-ups
+  var fc = document.getElementById('followupChips');
+  fc.innerHTML = '';
+  (report.followUps || []).forEach(function(q) {
+    var btn = document.createElement('button');
+    btn.className = 'fup-chip';
+    btn.textContent = q + ' ↗';
+    btn.addEventListener('click', function() {
+      document.getElementById('ctxInput').value = q;
+      document.getElementById('ctxInput').focus();
+    });
+    fc.appendChild(btn);
+  });
+
+  document.getElementById('resultsSection').classList.add('on');
+  document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderIssues(issues, eps) {
+  var epColorMap = {};
+  eps.forEach(function(e) { epColorMap[e.name] = e.color; });
+
+  var order = ['critical','warning','info','ok'];
+  var sorted = issues.slice().sort(function(a, b) {
+    var ac = a.category === 'correlation';
+    var bc = b.category === 'correlation';
+    if (ac && !bc) return -1;
+    if (!ac && bc) return 1;
+    return order.indexOf(a.severity) - order.indexOf(b.severity);
+  });
+
+  var list = document.getElementById('issueList');
+  list.innerHTML = '';
+  var sevMap = { critical:'crit', warning:'warn', info:'info', ok:'ok' };
+
+  function isCorr(issue) {
+    return issue.category === 'correlation' || (issue.endpoints && issue.endpoints.length > 1);
+  }
+
+  sorted.forEach(function(issue) {
+    if (activeFilter !== 'all') {
+      if (activeFilter === 'correlation' && !isCorr(issue)) return;
+      if (activeFilter !== 'correlation' && issue.severity !== activeFilter) return;
+    }
+    var sev = sevMap[issue.severity] || 'info';
+    var card = document.createElement('div');
+    card.className = 'issue-card ' + (isCorr(issue) ? 'corr' : sev);
+
+    var top = document.createElement('div'); top.className = 'itop';
+    var badges = document.createElement('div'); badges.className = 'ibadges';
+
+    var sevBadge = document.createElement('span');
+    sevBadge.className = 'ibadge ' + sev;
+    sevBadge.textContent = issue.severity;
+    badges.appendChild(sevBadge);
+
+    var catBadge = document.createElement('span');
+    catBadge.className = 'ibadge cat';
+    catBadge.textContent = issue.category;
+    badges.appendChild(catBadge);
+
+    if (isCorr(issue)) {
+      var corrBadge = document.createElement('span');
+      corrBadge.className = 'ibadge corr';
+      corrBadge.textContent = 'cross-endpoint';
+      badges.appendChild(corrBadge);
+    }
+
+    var titleCol = document.createElement('div'); titleCol.className = 'ititle-col';
+    var titleEl = document.createElement('div'); titleEl.className = 'ititle';
+    titleEl.textContent = issue.title;
+    titleCol.appendChild(titleEl);
+
+    if (issue.endpoints && issue.endpoints.length > 0) {
+      var epsDiv = document.createElement('div'); epsDiv.className = 'ieps';
+      issue.endpoints.forEach(function(name) {
+        var epBadge = document.createElement('span');
+        epBadge.className = 'ibadge ep';
+        epBadge.style.borderLeftColor = epColorMap[name] || '#6366f1';
+        epBadge.textContent = name;
+        epsDiv.appendChild(epBadge);
+      });
+      titleCol.appendChild(epsDiv);
+    }
+
+    top.appendChild(badges);
+    top.appendChild(titleCol);
+
+    var body = document.createElement('div'); body.className = 'ibody';
+    var detail = document.createElement('div'); detail.className = 'idetail';
+    detail.textContent = issue.detail;
+    body.appendChild(detail);
+
+    if (issue.recommendation) {
+      var rec = document.createElement('div'); rec.className = 'irec';
+      rec.innerHTML = '<strong>Recommendation:</strong> ' + issue.recommendation;
+      body.appendChild(rec);
+    }
+
+    card.appendChild(top);
+    card.appendChild(body);
+    list.appendChild(card);
+  });
+
+  if (list.children.length === 0) {
+    list.innerHTML = '<div style="font-size:13px;color:var(--t3);padding:1rem 0;font-weight:300">No findings match this filter.</div>';
+  }
+}
+
+function setFilter(f) {
+  activeFilter = f;
+  document.querySelectorAll('.fchip').forEach(function(c) { c.classList.remove('on'); });
+  document.querySelector('.fchip[data-filter="' + f + '"]').classList.add('on');
+  if (lastReport) renderIssues(lastReport.report.issues, lastReport.eps);
+}
+
+function showErr(msg) {
+  var el = document.getElementById('errBar');
+  el.textContent = msg;
+  el.classList.add('on');
+}
+
+async function saveToHistory() {
+  var s = typeof getSession === 'function' ? getSession() : null;
+  if (!s || !s.access_token) { if (typeof openModal === 'function') openModal('login'); return; }
+  if (!lastReport) return;
+  var report = lastReport.report;
+  var eps = lastReport.eps;
+  var ts = lastReport.ts;
+  await db.save(s.access_token, {
+    title: eps.map(function(e) { return e.name; }).join(' + ') + ' — ' + ts.toLocaleDateString(),
+    summary: report.summary,
+    endpoint_count: eps.length,
+    issue_count: report.issues.length,
+    report_json: JSON.stringify(report),
+    created_at: ts.toISOString()
+  });
+  var btn = document.getElementById('saveBtn');
+  btn.textContent = 'Saved!';
+  setTimeout(function() { btn.textContent = 'Save'; }, 2000);
+}
+
+function copyReport() {
+  if (!lastReport) return;
+  var report = lastReport.report;
+  var eps = lastReport.eps;
+  var lines = [
+    'SIP/VoIP Diagnostic — SIPSymposium',
+    new Date().toLocaleString(),
+    'Endpoints: ' + eps.map(function(e) { return e.name; }).join(', '),
+    '', 'SUMMARY', report.summary
+  ];
+  if (report.correlationSummary) lines.push('', 'CROSS-ENDPOINT', report.correlationSummary);
+  lines.push('', 'FINDINGS');
+  report.issues.forEach(function(i) {
+    lines.push('\n[' + i.severity.toUpperCase() + '] ' + i.title + ' (' + i.category + ')');
+    if (i.endpoints && i.endpoints.length) lines.push('Endpoints: ' + i.endpoints.join(', '));
+    lines.push(i.detail);
+    if (i.recommendation) lines.push('> ' + i.recommendation);
+  });
+  navigator.clipboard.writeText(lines.join('\n'));
+  var btn = document.getElementById('copyBtn');
+  btn.textContent = 'Copied!';
+  setTimeout(function() { btn.textContent = 'Copy report'; }, 1800);
+}
+
+// ── Wire up all buttons after DOM ready ──
+document.addEventListener('DOMContentLoaded', function() {
+  // Add endpoint button
+  document.getElementById('addEpBtn').addEventListener('click', addEndpoint);
+
+  // Clear all
+  document.getElementById('clearBtn').addEventListener('click', function() {
+    endpoints = [];
+    epCounter = 0;
+    removeDiagram();
+    document.getElementById('resultsSection').classList.remove('on');
+    addEndpoint();
+    addEndpoint();
+  });
+
+  // Run analysis
+  document.getElementById('runBtn').addEventListener('click', runAnalysis);
+
+  // Save / copy
+  document.getElementById('saveBtn').addEventListener('click', saveToHistory);
+  document.getElementById('copyBtn').addEventListener('click', copyReport);
+
+  // Remove diagram
+  document.getElementById('removeDiagBtn').addEventListener('click', removeDiagram);
+
+  // Diagram file input
+  document.getElementById('diagFileInput').addEventListener('change', function() {
+    handleDiagFile(this.files[0]);
+  });
+
+  // Diagram drag/drop
+  var diagDrop = document.getElementById('diagDrop');
+  diagDrop.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('drag'); });
+  diagDrop.addEventListener('dragleave', function() { this.classList.remove('drag'); });
+  diagDrop.addEventListener('drop', function(e) {
+    e.preventDefault();
+    this.classList.remove('drag');
+    handleDiagFile(e.dataTransfer.files[0]);
+  });
+
+  // Diagram type chips
+  document.querySelectorAll('#diagTypeRow .chip').forEach(function(btn) {
+    btn.addEventListener('click', function() { this.classList.toggle('on'); });
+  });
+
+  // Filter chips
+  document.querySelectorAll('.fchip').forEach(function(btn) {
+    btn.addEventListener('click', function() { setFilter(this.getAttribute('data-filter')); });
+  });
+
+  // Start with 2 endpoints
+  addEndpoint();
+  addEndpoint();
+});
+</script>
+<script src="auth.js"></script>
+</body>
+</html>
