@@ -693,6 +693,38 @@ app.get('/', function(req, res) {
   res.json({ status: 'ok', service: 'SIPSymposium PCAP Analyzer', version: '2.0.0' });
 });
 
+// Claude proxy endpoint — handles large payloads that Netlify can't
+app.post('/claude', checkApiKey, async function(req, res) {
+  try {
+    const { messages, model, max_tokens } = req.body;
+    if (!messages) return res.status(400).json({ error: 'Missing messages' });
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: model || 'claude-sonnet-4-20250514',
+        max_tokens: max_tokens || 4000,
+        messages: messages
+      })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ error: 'Anthropic API error: ' + errText });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/health', function(req, res) {
   exec('tshark --version 2>&1 | head -1', function(err, stdout) {
     res.json({ status: err ? 'degraded' : 'ok', tshark: err ? 'not found' : stdout.trim(), uptime: Math.round(process.uptime()) });
