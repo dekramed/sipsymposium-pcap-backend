@@ -9,19 +9,15 @@ const os         = require('os');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-// ── CORS ──
-app.use(cors({
-  origin: [
-    'https://sipsymposium.com',
-    'https://www.sipsymposium.com',
-    'http://localhost:3000',
-    'http://127.0.0.1:5500',
-    'http://127.0.0.1'
-  ],
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
-}));
-app.use(express.json());
+// ── CORS — allow all origins for multipart uploads ──
+app.use(function(req, res, next) {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key');
+  if (req.method === 'OPTIONS') { return res.sendStatus(200); }
+  next();
+});
+app.use(express.json({ limit: '10mb' }));
 
 // ── API key protection ──
 function checkApiKey(req, res, next) {
