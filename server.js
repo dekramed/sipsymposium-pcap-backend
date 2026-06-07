@@ -489,10 +489,10 @@ async function analyzePcap(filePath, filename) {
   try {
     const rtcpOut = await run(
       'tshark -r "' + filePath + '" -Y rtcp -T fields ' +
-      '-e frame.time_relative -e ip.src -e ip.dst -e rtcp.ssrc ' +
+      '-e frame.time_relative -e ip.src -e ip.dst -e rtcp.ssrc.identifier ' +
       '-e rtcp.pt -e rtcp.senderssrc -e rtcp.ssrc.fraction ' +
-      '-e rtcp.ssrc.lost -e rtcp.ssrc.jitter -e rtcp.sender.packet_count ' +
-      '-E separator="|" 2>/dev/null'
+      '-e rtcp.ssrc.cum_nr -e rtcp.ssrc.jitter -e rtcp.sender.packetcount ' +
+      '-E separator="|" -E occurrence=f 2>/dev/null'
     );
     const reports = [];
     if (rtcpOut) {
@@ -514,14 +514,40 @@ async function analyzePcap(filePath, filename) {
     const dtmfOut = await run(
       'tshark -r "' + filePath + '" -Y "rtp.p_type==101 || rtp.p_type==96 || rtp.p_type==97" ' +
       '-T fields -e frame.time_relative -e ip.src -e ip.dst ' +
-      '-e rtp.telephone-event.event -e rtp.telephone-event.duration -e rtp.telephone-event.end ' +
+      '-e rtpevent.event_id -e rtpevent.duration -e rtpevent.end_of_event ' +
       '-E separator="|" 2>/dev/null'
     );
     if (dtmfOut) {
+      // Each DTMF digit spans many RTP packets (same event id, repeated until
+      // the end bit). Collapse a contiguous same-digit burst into ONE event.
+      // The end bit separates repeats of the same digit; if it's missing
+      // (final packet lost), the burst boundary still flushes — so a digit is
+      // never dropped, just merged.
+      let cur = null, curEnded = false;
+      const flush = function(){ if (cur) { result.dtmf.events.push(cur); cur = null; curEnded = false; } };
       dtmfOut.split('\n').filter(Boolean).forEach(function(line) {
         const p = line.split('|');
-        if (p[3]) result.dtmf.events.push({ time: p[0], src: p[1], dst: p[2], digit: p[3], duration: p[4], end: p[5] });
+        if (!p[3]) return;                       // no event id on this packet
+        const ended = (p[5] === '1');
+        if (cur && cur.digit === p[3]) {
+          if (curEnded && !ended) {
+            // a fresh press of the same digit (new burst begins with end=0)
+            flush();
+            cur = { time: p[0], src: p[1], dst: p[2], digit: p[3], duration: p[4], end: p[5] };
+            curEnded = ended;
+          } else {
+            // continuation of the burst, or a redundant end-bit retransmission
+            if (parseInt(p[4] || '0', 10) > parseInt(cur.duration || '0', 10)) { cur.duration = p[4]; cur.end = p[5]; }
+            if (ended) curEnded = true;
+          }
+        } else {
+          // first packet, or the digit changed
+          flush();
+          cur = { time: p[0], src: p[1], dst: p[2], digit: p[3], duration: p[4], end: p[5] };
+          curEnded = ended;
+        }
       });
+      flush();
     }
   } catch(e) {}
 
