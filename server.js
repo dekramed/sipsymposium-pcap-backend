@@ -388,7 +388,7 @@ async function analyzePcap(filePath, filename) {
       '-e udp.srcport -e udp.dstport -e tcp.srcport -e tcp.dstport ' +
       '-e sip.Request-Line -e sip.Status-Line -e sip.Call-ID -e sip.CSeq ' +
       '-e sip.From -e sip.To -e sip.Via -e sip.Contact ' +
-      '-e sip.User-Agent -e sip.content-type -e sip.Response-Code ' +
+      '-e sip.User-Agent -e sip.Content-Type -e sip.Status-Code ' +
       '-E separator="|" 2>/dev/null'
     );
     const messages = [];
