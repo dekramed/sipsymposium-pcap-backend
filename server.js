@@ -410,6 +410,23 @@ async function analyzePcap(filePath, filename) {
     }
     result.sip = summarizeSIP(messages);
 
+    // ── ladder signaling: full ordered message list with ground-truth
+    //    direction (ip.src -> ip.dst). Consumed client-side by SipLadder.
+    //    Not deduplicated — retransmissions are meaningful in a ladder.
+    //    formatForClaude() never reads this field, so the AI prompt is unchanged.
+    result.signaling = messages.map(function (m) {
+      return {
+        t:       m.time,
+        src:     m.src_ip + ':' + (m.src_port || ''),
+        dst:     m.dst_ip + ':' + (m.dst_port || ''),
+        method:  m.request_line ? m.request_line.split(' ')[0] : null,
+        status:  m.status_line || (m.response_code ? ('SIP/2.0 ' + m.response_code) : null),
+        code:    m.response_code || null,
+        call_id: m.call_id || null,
+        cseq:    m.cseq || null
+      };
+    });
+
     // SIP dialog stats
     const statOut = await run('tshark -r "' + filePath + '" -q -z sip,stat 2>/dev/null');
     result.sip.tshark_stats = statOut;
