@@ -389,6 +389,7 @@ async function analyzePcap(filePath, filename) {
       '-e sip.Request-Line -e sip.Status-Line -e sip.Call-ID -e sip.CSeq ' +
       '-e sip.From -e sip.To -e sip.Via -e sip.Contact ' +
       '-e sip.User-Agent -e sip.Content-Type -e sip.Status-Code ' +
+      '-e sdp.media -e sdp.connection_info ' +
       '-E separator="|" 2>/dev/null'
     );
     const messages = [];
@@ -404,7 +405,8 @@ async function analyzePcap(filePath, filename) {
           from: p[12], to: p[13],
           via: p[14], contact: p[15],
           user_agent: p[16], content_type: p[17],
-          response_code: p[18]
+          response_code: p[18],
+          sdp_media: p[19], sdp_conn: p[20]
         });
       });
     }
@@ -423,7 +425,16 @@ async function analyzePcap(filePath, filename) {
         status:  m.status_line || (m.response_code ? ('SIP/2.0 ' + m.response_code) : null),
         code:    m.response_code || null,
         call_id: m.call_id || null,
-        cseq:    m.cseq || null
+        cseq:    m.cseq || null,
+        // curated detail for hover/tap (already extracted above; just carried through)
+        from:      m.from || null,
+        to:        m.to || null,
+        via:       m.via || null,
+        contact:   m.contact || null,
+        ua:        m.user_agent || null,
+        ctype:     m.content_type || null,
+        sdp_media: m.sdp_media || null,
+        sdp_conn:  m.sdp_conn || null
       };
     });
 
