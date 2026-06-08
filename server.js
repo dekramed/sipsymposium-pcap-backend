@@ -390,6 +390,7 @@ async function analyzePcap(filePath, filename) {
       '-e sip.From -e sip.To -e sip.Via -e sip.Contact ' +
       '-e sip.User-Agent -e sip.Content-Type -e sip.Status-Code ' +
       '-e sdp.media -e sdp.connection_info ' +
+      '-e sip.Reason -e sip.Record-Route -e sip.Max-Forwards ' +
       '-E separator="|" 2>/dev/null'
     );
     const messages = [];
@@ -406,7 +407,8 @@ async function analyzePcap(filePath, filename) {
           via: p[14], contact: p[15],
           user_agent: p[16], content_type: p[17],
           response_code: p[18],
-          sdp_media: p[19], sdp_conn: p[20]
+          sdp_media: p[19], sdp_conn: p[20],
+          reason_hdr: p[21], record_route: p[22], max_forwards: p[23]
         });
       });
     }
@@ -434,7 +436,11 @@ async function analyzePcap(filePath, filename) {
         ua:        m.user_agent || null,
         ctype:     m.content_type || null,
         sdp_media: m.sdp_media || null,
-        sdp_conn:  m.sdp_conn || null
+        sdp_conn:  m.sdp_conn || null,
+        ruri:      (m.request_line ? (m.request_line.split(' ')[1] || null) : null),
+        reason_hdr:   m.reason_hdr || null,
+        record_route: m.record_route || null,
+        max_fwd:      m.max_forwards || null
       };
     });
 
