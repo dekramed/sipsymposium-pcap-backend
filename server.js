@@ -752,8 +752,19 @@ app.get('/', function(req, res) {
 // Claude proxy endpoint — handles large payloads that Netlify can't
 app.post('/claude', checkApiKey, async function(req, res) {
   try {
-    const { messages, model, max_tokens } = req.body;
+    const { messages, model, max_tokens, output_config, thinking } = req.body;
     if (!messages) return res.status(400).json({ error: 'Missing messages' });
+
+    // Base request. output_config / thinking are forwarded only when the caller
+    // sets them — so current 4.5 traffic is unchanged, and Sonnet 5 effort control
+    // (output_config.effort) can flow through once the frontend starts sending it.
+    const anthropicBody = {
+      model: model || 'claude-sonnet-4-5-20250929',
+      max_tokens: max_tokens || 4000,
+      messages: messages
+    };
+    if (output_config) anthropicBody.output_config = output_config;
+    if (thinking)      anthropicBody.thinking      = thinking;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -762,11 +773,7 @@ app.post('/claude', checkApiKey, async function(req, res) {
         'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify({
-        model: model || 'claude-sonnet-4-5-20250929',
-        max_tokens: max_tokens || 4000,
-        messages: messages
-      })
+      body: JSON.stringify(anthropicBody)
     });
 
     if (!response.ok) {
